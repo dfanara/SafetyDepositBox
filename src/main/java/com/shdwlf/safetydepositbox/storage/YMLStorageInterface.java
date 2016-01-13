@@ -7,6 +7,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.UUID;
 
 public class YMLStorageInterface extends AutoSavingStorageInterface {
@@ -15,8 +16,11 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
     private YamlConfiguration configuration;
     private File configurationFile;
 
+    private HashMap<UUID, HashMap<Integer, Vault>> vaultCache;
+
     public YMLStorageInterface(SafetyDepositBox safetyDepositBox) {
         this.safetyDepositBox = safetyDepositBox;
+        this.vaultCache = new HashMap<>();
     }
 
     @Override
@@ -52,12 +56,25 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     @Override
     void coldStore(UUID owner) {
-        //TODO: vault.requestRemoveFromCache();
+        HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+        if(vaults != null) {
+            for(Vault vault : vaults.values())
+                vault.requestRemoveFromCache();
+        }
+    }
+
+    protected Vault createNewVault(UUID owner, int id, int size) {
+        //TODO: Insert vault into cache and then return new vault.
+        return null;
     }
 
     @Override
     public Vault getVault(UUID owner, int id) {
         //TODO: Load from cached vaults
+        HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+        if(vaults == null || vaults.get(id) == null)
+            return createNewVault(owner, id, 54); //TODO: Get default vault size.
+
         return new Vault(owner, id, 54);
     }
 
