@@ -12,6 +12,16 @@ public class Vault {
     private int id;
     private Inventory inventory;
 
+    /**
+     * True if vault has been changed since last loaded.
+     */
+    private boolean pendingChanges = false;
+
+    /**
+     * True if the vault should remain in the cache after being saved
+     */
+    private boolean keepCached = true;
+
     public Vault(UUID owner, int id, int size, ItemStack... items) {
         if(owner == null)
             throw new IllegalArgumentException("Owner UUID must not be null");
@@ -39,4 +49,15 @@ public class Vault {
         return this.owner;
     }
 
+    public boolean hasPendingChanges() {
+        return this.pendingChanges;
+    }
+
+    public void requestSave() {
+        this.pendingChanges = true;
+    }
+
+    public void requestRemoveFromCache() {
+        this.keepCached = false;
+    }
 }
