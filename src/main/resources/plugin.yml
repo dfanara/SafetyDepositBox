@@ -1,0 +1,4 @@
+name: SafetyDepositBox
+author: Shadowwolf97
+version: ${project.version}
+main: com.shdwlf.safetydepositbox.SafetyDepositBox
