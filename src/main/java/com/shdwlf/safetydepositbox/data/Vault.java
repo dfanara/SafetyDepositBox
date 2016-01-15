@@ -1,6 +1,7 @@
 package com.shdwlf.safetydepositbox.data;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
@@ -70,5 +71,14 @@ public class Vault {
 
     public void requestRemoveFromCache() {
         this.keepCached = false;
+    }
+
+    public boolean isEmpty() {
+        for(ItemStack is : inventory.getContents()) {
+            if(is != null && is.getType() != Material.AIR)
+                return false;
+        }
+
+        return true;
     }
 }

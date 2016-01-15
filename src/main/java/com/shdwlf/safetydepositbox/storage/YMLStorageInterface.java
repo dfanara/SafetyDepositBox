@@ -3,20 +3,15 @@ package com.shdwlf.safetydepositbox.storage;
 import com.shdwlf.safetydepositbox.SafetyDepositBox;
 import com.shdwlf.safetydepositbox.data.Vault;
 import com.shdwlf.safetydepositbox.util.ItemSerialization;
-import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     private final SafetyDepositBox safetyDepositBox;
-    private YamlConfiguration configuration;
-    private File configurationFile;
 
     private HashMap<UUID, HashMap<Integer, Vault>> vaultCache;
 
@@ -27,35 +22,14 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     @Override
     public void startup() {
-        this.configurationFile = new File(safetyDepositBox.getDataFolder(), "storage.yml");
-
-        if (!this.configurationFile.exists()) {
-            try {
-                this.configurationFile.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        configuration = new YamlConfiguration();
-        try {
-            configuration.load(configurationFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        } catch (InvalidConfigurationException e) {
-            e.printStackTrace();
-        }
+        File file = new File(safetyDepositBox.getDataFolder(), "storage");
+        if(!file.exists())
+            file.mkdir();
     }
 
     @Override
     public void shutdown() {
         autoSave();
-
-        try {
-            configuration.save(configurationFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
     }
 
     @Override
@@ -82,7 +56,7 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
     public Vault getVault(UUID owner, int id) {
         HashMap<Integer, Vault> vaults = vaultCache.get(owner);
         if (vaults == null || vaults.get(id) == null)
-            return createNewVault(owner, id, 54); //TODO: Get default vault size.
+            return createNewVault(owner, id, safetyDepositBox.getConfig().getInt("vault-size", 54));
 
         return vaults.get(id);
     }
@@ -104,25 +78,26 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     @Override
     public void autoSave() {
-        //Add new items back to the configuration yml
         for(Map.Entry<UUID, HashMap<Integer, Vault>> data : vaultCache.entrySet()) {
+            YamlConfiguration vaultStore = getPlayerStore(data.getKey(), true);
+            File vaultFile = getPlayerFile(data.getKey());
+
             HashMap<Integer, Vault> vaults = data.getValue();
             for(Map.Entry<Integer, Vault> vault : vaults.entrySet()) {
                 if(vault.getValue().hasPendingChanges()) {
-                    saveVaultToYML(vault.getValue());
+                    saveVaultToYML(vault.getValue(), vaultStore);
                     vault.getValue().resetSaveRequest();
                 }
             }
+
+            try {
+                vaultStore.save(vaultFile);
+            } catch (IOException e) {
+                SafetyDepositBox.debug("Could Not Safe Vault: " + vaultFile.toString());
+                e.printStackTrace();
+            }
         }
 
-        //Save the new configuration yml
-        try {
-            configuration.save(configurationFile);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        //Remove items from the cache
         for (Map.Entry<UUID, HashMap<Integer, Vault>> data : vaultCache.entrySet()) {
             HashMap<Integer, Vault> vaults = data.getValue();
             UUID uuid = data.getKey();
@@ -137,84 +112,82 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
         }
     }
 
-    protected void saveVaultToYML(Vault vault) {
+    protected void saveVaultToYML(Vault vault, YamlConfiguration vaultStore) {
         SafetyDepositBox.debug("Serializing Vault: " + vault.getOwner().toString() + ":" + vault.getId());
-        String inv = null;
         try {
-            inv = ItemSerialization.toBase64(vault.getInventory().getContents());
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InstantiationException e) {
+            if(vault.isEmpty()) {
+                vaultStore.set(vault.getId() + "", null); //Don't store data for empty vaults
+            }else {
+                String inv = ItemSerialization.toBase64(vault.getInventory().getContents());
+                vaultStore.set(vault.getId() + ".size", vault.getSize());
+                vaultStore.set(vault.getId() + ".data", inv);
+            }
+        } catch (Exception e) {
+            SafetyDepositBox.debug("Could Not Save Vault: " + vault.getOwner().toString() + ".yml");
             e.printStackTrace();
         }
-        configuration.set(vault.getOwner().toString() + "." + vault.getId(), inv);
     }
 
     @Override
     public void cacheVaults(UUID owner) {
-        //Load vaults into vault cache from config on startup.
-        if(!configuration.contains(owner.toString()))
+        YamlConfiguration vaultStore = getPlayerStore(owner);
+        if(vaultStore == null)
             return;
-        ConfigurationSection section = configuration.getConfigurationSection(owner.toString());
-        Set<String> keys = section.getKeys(false);
+
+        Set<String> keys = vaultStore.getKeys(false);
         for(String s : keys) {
             try {
-                Vault vault = null;
-                try {
-                    vault = new Vault(owner, Integer.parseInt(s), 54, ItemSerialization.fromBase64(section.getString(s), 54));
-                } catch (InvocationTargetException e) {
-                    e.printStackTrace();
-                } catch (NoSuchMethodException e) {
-                    e.printStackTrace();
-                } catch (ClassNotFoundException e) {
-                    e.printStackTrace();
-                } catch (IllegalAccessException e) {
-                    e.printStackTrace();
-                }
+                int vaultSize = vaultStore.getInt(s + ".size");
+                int vaultId = Integer.parseInt(s);
+                Vault vault = new Vault(
+                        owner,
+                        vaultId,
+                        vaultSize,
+                        ItemSerialization.fromBase64(vaultStore.getString(s + ".data"), vaultSize)
+                );
+
                 if(!vaultCache.containsKey(owner))
                     vaultCache.put(owner, new HashMap<Integer, Vault>());
+
                 HashMap<Integer, Vault> vaults = vaultCache.get(owner);
                 vaults.put(Integer.parseInt(s), vault);
                 SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
-                if(false)
-                    throw new IOException();
-            } catch (IOException e) {
-                SafetyDepositBox.debug("Could Not Load From Cache: " + owner.toString() + ":" + s);
+            } catch (Exception e) {
+                SafetyDepositBox.debug("Could Not Cache: " + owner.toString() + ":" + s);
                 e.printStackTrace();
             }
-//            List<String> raw = section.getStringList(s);
-//            HashMap<Integer, ItemStack> items = new HashMap<>();
-//            int inventorySize = 54; //TODO: Get default inventory size
-//            int inventoryId = Integer.parseInt(s);
-//            for(String line : raw) {
-//                if(line.startsWith("@")) {
-//                    if(line.charAt(1) == 's') {
-//                        inventorySize = Integer.parseInt(line.substring(2));
-//                    }
-//                }else {
-//                    int slot = Integer.parseInt(line.substring(0, 2));
-//                    items.put(slot, ItemUtils.fromString(line.substring(2)));
-//                }
-//            }
-//
-//            if(!vaultCache.containsKey(owner))
-//                vaultCache.put(owner, new HashMap<Integer, Vault>());
-//            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
-//            Vault vault = new Vault(owner, inventoryId, inventorySize);
-//
-//            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
-//                vault.getInventory().setItem(is.getKey(), is.getValue());
-//            }
-//
-//            vaults.put(inventoryId, vault);
-//            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
         }
     }
 
+    protected File getPlayerFile(UUID owner) {
+        return new File(safetyDepositBox.getDataFolder(), "storage" + File.separator + owner.toString() + ".yml");
+    }
+
+    protected YamlConfiguration getPlayerStore(UUID owner, boolean createIfMissing) {
+        File file = getPlayerFile(owner);
+        if(!file.exists()) {
+            if(createIfMissing) {
+                try {
+                    file.createNewFile();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }else {
+                return null;
+            }
+        }
+
+        YamlConfiguration vaultStore = new YamlConfiguration();
+        try {
+            vaultStore.load(file);
+        } catch (Exception e) {
+            SafetyDepositBox.debug("Could Not Load Vault File: " + owner.toString() + ".yml");
+            e.printStackTrace();
+        }
+        return vaultStore;
+    }
+
+    protected YamlConfiguration getPlayerStore(UUID owner) {
+        return getPlayerStore(owner, false);
+    }
 }
