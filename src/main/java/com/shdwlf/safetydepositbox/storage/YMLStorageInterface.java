@@ -164,32 +164,6 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
                 SafetyDepositBox.debug("Could Not Load From Cache: " + owner.toString() + ":" + s);
                 e.printStackTrace();
             }
-//            List<String> raw = section.getStringList(s);
-//            HashMap<Integer, ItemStack> items = new HashMap<>();
-//            int inventorySize = 54; //TODO: Get default inventory size
-//            int inventoryId = Integer.parseInt(s);
-//            for(String line : raw) {
-//                if(line.startsWith("@")) {
-//                    if(line.charAt(1) == 's') {
-//                        inventorySize = Integer.parseInt(line.substring(2));
-//                    }
-//                }else {
-//                    int slot = Integer.parseInt(line.substring(0, 2));
-//                    items.put(slot, ItemUtils.fromString(line.substring(2)));
-//                }
-//            }
-//
-//            if(!vaultCache.containsKey(owner))
-//                vaultCache.put(owner, new HashMap<Integer, Vault>());
-//            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
-//            Vault vault = new Vault(owner, inventoryId, inventorySize);
-//
-//            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
-//                vault.getInventory().setItem(is.getKey(), is.getValue());
-//            }
-//
-//            vaults.put(inventoryId, vault);
-//            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
         }
     }
 
