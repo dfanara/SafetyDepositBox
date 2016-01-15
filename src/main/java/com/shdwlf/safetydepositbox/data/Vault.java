@@ -38,7 +38,7 @@ public class Vault {
     }
 
     public int getSize() {
-        return this.getSize();
+        return this.inventory.getSize();
     }
 
     public int getId() {
@@ -53,8 +53,16 @@ public class Vault {
         return this.pendingChanges;
     }
 
+    public boolean isPendingCacheRemoval() {
+        return !this.keepCached;
+    }
+
     public void requestSave() {
         this.pendingChanges = true;
+    }
+
+    public void resetSaveRequest() {
+        this.pendingChanges = false;
     }
 
     public void requestRemoveFromCache() {

@@ -2,13 +2,15 @@ package com.shdwlf.safetydepositbox.storage;
 
 import com.shdwlf.safetydepositbox.SafetyDepositBox;
 import com.shdwlf.safetydepositbox.data.Vault;
+import com.shdwlf.safetydepositbox.util.ItemUtils;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.UUID;
+import java.util.*;
 
 public class YMLStorageInterface extends AutoSavingStorageInterface {
 
@@ -27,7 +29,7 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
     public void startup() {
         this.configurationFile = new File(safetyDepositBox.getDataFolder(), "storage.yml");
 
-        if(!this.configurationFile.exists()) {
+        if (!this.configurationFile.exists()) {
             try {
                 this.configurationFile.createNewFile();
             } catch (IOException e) {
@@ -47,6 +49,8 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     @Override
     public void shutdown() {
+        autoSave();
+
         try {
             configuration.save(configurationFile);
         } catch (IOException e) {
@@ -55,27 +59,32 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
     }
 
     @Override
-    void coldStore(UUID owner) {
+    public void coldStore(UUID owner) {
         HashMap<Integer, Vault> vaults = vaultCache.get(owner);
-        if(vaults != null) {
-            for(Vault vault : vaults.values())
+        if (vaults != null) {
+            for (Vault vault : vaults.values()) {
+                SafetyDepositBox.debug("Requesting Cold Store: " + vault.getOwner().toString() + ":" + vault.getId());
                 vault.requestRemoveFromCache();
+            }
         }
     }
 
     protected Vault createNewVault(UUID owner, int id, int size) {
-        //TODO: Insert vault into cache and then return new vault.
-        return null;
+        if (!vaultCache.containsKey(owner))
+            vaultCache.put(owner, new HashMap<Integer, Vault>());
+        HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+        Vault vault = new Vault(owner, id, size);
+        vaults.put(id, vault);
+        return vault;
     }
 
     @Override
     public Vault getVault(UUID owner, int id) {
-        //TODO: Load from cached vaults
         HashMap<Integer, Vault> vaults = vaultCache.get(owner);
-        if(vaults == null || vaults.get(id) == null)
+        if (vaults == null || vaults.get(id) == null)
             return createNewVault(owner, id, 54); //TODO: Get default vault size.
 
-        return new Vault(owner, id, 54);
+        return vaults.get(id);
     }
 
     @Override
@@ -89,24 +98,94 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
     }
 
     @Override
-    int autoSaveFrequency() {
+    public int autoSaveFrequency() {
         return 20 * 60 * 5; //AutoSave every 5 minutes
     }
 
     @Override
-    void autoSave() {
+    public void autoSave() {
+        //Add new items back to the configuration yml
+        for(Map.Entry<UUID, HashMap<Integer, Vault>> data : vaultCache.entrySet()) {
+            HashMap<Integer, Vault> vaults = data.getValue();
+            for(Map.Entry<Integer, Vault> vault : vaults.entrySet()) {
+                if(vault.getValue().hasPendingChanges()) {
+                    saveVaultToYML(vault.getValue());
+                    vault.getValue().resetSaveRequest();
+                }
+            }
+        }
+
+        //Save the new configuration yml
         try {
             configuration.save(configurationFile);
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        //TODO: Loop through vaults and remove from cache if necessary.
+        //Remove items from the cache
+        for (Map.Entry<UUID, HashMap<Integer, Vault>> data : vaultCache.entrySet()) {
+            HashMap<Integer, Vault> vaults = data.getValue();
+            UUID uuid = data.getKey();
+            ArrayList<Integer> toRemove = new ArrayList<>();
+            for(Map.Entry<Integer, Vault> vData : vaults.entrySet()) {
+                vData.getValue().resetSaveRequest();
+                if (vData.getValue().isPendingCacheRemoval())
+                    toRemove.add(vData.getKey()); //Schedule Vault for removal
+            }
+            for(int i : toRemove)
+                vaults.remove(i);
+        }
+    }
+
+    protected void saveVaultToYML(Vault vault) {
+        SafetyDepositBox.debug("Serializing Vault: " + vault.getOwner().toString() + ":" + vault.getId());
+        ArrayList<String> items = new ArrayList<>();
+        //TODO: Serialize vault items
+        items.add("@s" + vault.getSize());
+
+        for(int slot = 0; slot < vault.getInventory().getSize(); slot++) {
+            if(vault.getInventory().getItem(slot) != null)
+                items.add(String.format("%02d", slot) + ItemUtils.toString(vault.getInventory().getItem(slot)));
+        }
+
+        configuration.set(vault.getOwner().toString() + "." + vault.getId(), items);
     }
 
     @Override
-    void cacheVaults(UUID owner) {
-        //Ignore. All vaults are loaded from YML on startup.
+    public void cacheVaults(UUID owner) {
+        //Load vaults into vault cache from config on startup.
+        if(!configuration.contains(owner.toString()))
+            return;
+        ConfigurationSection section = configuration.getConfigurationSection(owner.toString());
+        Set<String> keys = section.getKeys(false);
+        for(String s : keys) {
+            List<String> raw = section.getStringList(s);
+            HashMap<Integer, ItemStack> items = new HashMap<>();
+            int inventorySize = 54; //TODO: Get default inventory size
+            int inventoryId = Integer.parseInt(s);
+            for(String line : raw) {
+                if(line.startsWith("@")) {
+                    if(line.charAt(1) == 's') {
+                        inventorySize = Integer.parseInt(line.substring(2));
+                    }
+                }else {
+                    int slot = Integer.parseInt(line.substring(0, 2));
+                    items.put(slot, ItemUtils.fromString(line.substring(2)));
+                }
+            }
+
+            if(!vaultCache.containsKey(owner))
+                vaultCache.put(owner, new HashMap<Integer, Vault>());
+            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+            Vault vault = new Vault(owner, inventoryId, inventorySize);
+
+            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
+                vault.getInventory().setItem(is.getKey(), is.getValue());
+            }
+
+            vaults.put(inventoryId, vault);
+            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
+        }
     }
 
 }
