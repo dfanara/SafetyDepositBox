@@ -2,15 +2,14 @@ package com.shdwlf.safetydepositbox.storage;
 
 import com.shdwlf.safetydepositbox.SafetyDepositBox;
 import com.shdwlf.safetydepositbox.data.Vault;
-import com.shdwlf.safetydepositbox.util.ItemUtils;
+import com.shdwlf.safetydepositbox.util.ItemSerialization;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 
 public class YMLStorageInterface extends AutoSavingStorageInterface {
@@ -140,7 +139,20 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     protected void saveVaultToYML(Vault vault) {
         SafetyDepositBox.debug("Serializing Vault: " + vault.getOwner().toString() + ":" + vault.getId());
-        String inv = ItemUtils.toBase64(vault.getInventory());
+        String inv = null;
+        try {
+            inv = ItemSerialization.toBase64(vault.getInventory().getContents());
+        } catch (NoSuchMethodException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InstantiationException e) {
+            e.printStackTrace();
+        }
         configuration.set(vault.getOwner().toString() + "." + vault.getId(), inv);
     }
 
@@ -153,17 +165,55 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
         Set<String> keys = section.getKeys(false);
         for(String s : keys) {
             try {
-                Inventory inventory = ItemUtils.fromBase64(section.getString(s));
-                Vault vault = new Vault(owner, Integer.parseInt(s), inventory.getSize(), inventory.getContents());
+                Vault vault = null;
+                try {
+                    vault = new Vault(owner, Integer.parseInt(s), 54, ItemSerialization.fromBase64(section.getString(s), 54));
+                } catch (InvocationTargetException e) {
+                    e.printStackTrace();
+                } catch (NoSuchMethodException e) {
+                    e.printStackTrace();
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
                 if(!vaultCache.containsKey(owner))
                     vaultCache.put(owner, new HashMap<Integer, Vault>());
                 HashMap<Integer, Vault> vaults = vaultCache.get(owner);
                 vaults.put(Integer.parseInt(s), vault);
                 SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
+                if(false)
+                    throw new IOException();
             } catch (IOException e) {
                 SafetyDepositBox.debug("Could Not Load From Cache: " + owner.toString() + ":" + s);
                 e.printStackTrace();
             }
+//            List<String> raw = section.getStringList(s);
+//            HashMap<Integer, ItemStack> items = new HashMap<>();
+//            int inventorySize = 54; //TODO: Get default inventory size
+//            int inventoryId = Integer.parseInt(s);
+//            for(String line : raw) {
+//                if(line.startsWith("@")) {
+//                    if(line.charAt(1) == 's') {
+//                        inventorySize = Integer.parseInt(line.substring(2));
+//                    }
+//                }else {
+//                    int slot = Integer.parseInt(line.substring(0, 2));
+//                    items.put(slot, ItemUtils.fromString(line.substring(2)));
+//                }
+//            }
+//
+//            if(!vaultCache.containsKey(owner))
+//                vaultCache.put(owner, new HashMap<Integer, Vault>());
+//            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+//            Vault vault = new Vault(owner, inventoryId, inventorySize);
+//
+//            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
+//                vault.getInventory().setItem(is.getKey(), is.getValue());
+//            }
+//
+//            vaults.put(inventoryId, vault);
+//            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
         }
     }
 
