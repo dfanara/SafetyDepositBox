@@ -30,7 +30,10 @@ public class Vault {
         this.id = id;
         this.owner = owner;
         this.inventory = Bukkit.createInventory(null, size, "Vault #" + id);
-        this.inventory.addItem(items);
+
+        for(int i = 0; i < items.length; i++)
+            if(items[i] != null)
+                this.inventory.setItem(i, items[i]);
     }
 
     public Inventory getInventory() {

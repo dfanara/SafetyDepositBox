@@ -6,6 +6,7 @@ import com.shdwlf.safetydepositbox.util.ItemUtils;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
@@ -139,16 +140,8 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
 
     protected void saveVaultToYML(Vault vault) {
         SafetyDepositBox.debug("Serializing Vault: " + vault.getOwner().toString() + ":" + vault.getId());
-        ArrayList<String> items = new ArrayList<>();
-        //TODO: Serialize vault items
-        items.add("@s" + vault.getSize());
-
-        for(int slot = 0; slot < vault.getInventory().getSize(); slot++) {
-            if(vault.getInventory().getItem(slot) != null)
-                items.add(String.format("%02d", slot) + ItemUtils.toString(vault.getInventory().getItem(slot)));
-        }
-
-        configuration.set(vault.getOwner().toString() + "." + vault.getId(), items);
+        String inv = ItemUtils.toBase64(vault.getInventory());
+        configuration.set(vault.getOwner().toString() + "." + vault.getId(), inv);
     }
 
     @Override
@@ -159,32 +152,44 @@ public class YMLStorageInterface extends AutoSavingStorageInterface {
         ConfigurationSection section = configuration.getConfigurationSection(owner.toString());
         Set<String> keys = section.getKeys(false);
         for(String s : keys) {
-            List<String> raw = section.getStringList(s);
-            HashMap<Integer, ItemStack> items = new HashMap<>();
-            int inventorySize = 54; //TODO: Get default inventory size
-            int inventoryId = Integer.parseInt(s);
-            for(String line : raw) {
-                if(line.startsWith("@")) {
-                    if(line.charAt(1) == 's') {
-                        inventorySize = Integer.parseInt(line.substring(2));
-                    }
-                }else {
-                    int slot = Integer.parseInt(line.substring(0, 2));
-                    items.put(slot, ItemUtils.fromString(line.substring(2)));
-                }
+            try {
+                Inventory inventory = ItemUtils.fromBase64(section.getString(s));
+                Vault vault = new Vault(owner, Integer.parseInt(s), inventory.getSize(), inventory.getContents());
+                if(!vaultCache.containsKey(owner))
+                    vaultCache.put(owner, new HashMap<Integer, Vault>());
+                HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+                vaults.put(Integer.parseInt(s), vault);
+                SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
+            } catch (IOException e) {
+                SafetyDepositBox.debug("Could Not Load From Cache: " + owner.toString() + ":" + s);
+                e.printStackTrace();
             }
-
-            if(!vaultCache.containsKey(owner))
-                vaultCache.put(owner, new HashMap<Integer, Vault>());
-            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
-            Vault vault = new Vault(owner, inventoryId, inventorySize);
-
-            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
-                vault.getInventory().setItem(is.getKey(), is.getValue());
-            }
-
-            vaults.put(inventoryId, vault);
-            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
+//            List<String> raw = section.getStringList(s);
+//            HashMap<Integer, ItemStack> items = new HashMap<>();
+//            int inventorySize = 54; //TODO: Get default inventory size
+//            int inventoryId = Integer.parseInt(s);
+//            for(String line : raw) {
+//                if(line.startsWith("@")) {
+//                    if(line.charAt(1) == 's') {
+//                        inventorySize = Integer.parseInt(line.substring(2));
+//                    }
+//                }else {
+//                    int slot = Integer.parseInt(line.substring(0, 2));
+//                    items.put(slot, ItemUtils.fromString(line.substring(2)));
+//                }
+//            }
+//
+//            if(!vaultCache.containsKey(owner))
+//                vaultCache.put(owner, new HashMap<Integer, Vault>());
+//            HashMap<Integer, Vault> vaults = vaultCache.get(owner);
+//            Vault vault = new Vault(owner, inventoryId, inventorySize);
+//
+//            for(HashMap.Entry<Integer, ItemStack> is : items.entrySet()) {
+//                vault.getInventory().setItem(is.getKey(), is.getValue());
+//            }
+//
+//            vaults.put(inventoryId, vault);
+//            SafetyDepositBox.debug("Cached Vault: " + vault.getOwner().toString() + ":" + vault.getId());
         }
     }
 

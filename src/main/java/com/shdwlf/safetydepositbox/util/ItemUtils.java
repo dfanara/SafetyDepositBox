@@ -14,24 +14,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 public class ItemUtils {
-
-    public static String toString(ItemStack itemStack) {
-        YamlConfiguration config = new YamlConfiguration();
-        config.set("i", itemStack);
-        return config.saveToString();
-    }
-
-    public static ItemStack fromString(String string) {
-        YamlConfiguration config = new YamlConfiguration();
-        try {
-            config.loadFromString(string);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-        return config.getItemStack("i", null);
-    }
-
     /**
      * Converts the player inventory to a String array of Base64 strings. First string is the content and second string is the armor.
      *

@@ -32,6 +32,10 @@ public class SafetyDepositBox extends JavaPlugin {
             },
             storageInterface.autoSaveFrequency(), storageInterface.autoSaveFrequency());
 
+        for(Player player : Bukkit.getOnlinePlayers()) {
+            vaultManager.cacheVaults(player.getUniqueId());
+        }
+
         registerListeners();
     }
 
